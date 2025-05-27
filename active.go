@@ -42,8 +42,12 @@ func (m Session) Init() tea.Cmd {
 func (m Session) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
+	// toggle between break and work sessions
+	if m.timer.Timedout() {
+		m.rest = !m.rest
+	}
 	switch msg := msg.(type) {
-	case PomodoroMsg:
+	case SettingsMsg:
 		if m.rest {
 			m.duration, m.err = time.ParseDuration(msg.rest)
 		} else {
@@ -57,9 +61,17 @@ func (m Session) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m Session) Done() bool {
+	return m.timer.Timedout()
+}
+
 func (m Session) View() string {
+	message := "Get to work"
+	if m.rest {
+		message = "Time to snooze..."
+	}
 	return lipgloss.JoinVertical(lipgloss.Left,
-		"Get to work",
+		message,
 		// Note: ViewAs is easier than wrangling progress in Update, btw.
 		m.progress.ViewAs(float64(m.duration.Seconds()-m.timer.Timeout.Seconds())/m.duration.Seconds()),
 		m.timer.View(),

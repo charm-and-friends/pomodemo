@@ -28,9 +28,10 @@ const (
 
 type Model struct {
 	// active, new, history? break?
-	active int
-	views  []tea.Model
-	form   *huh.Form
+	active   int
+	views    []tea.Model
+	form     *huh.Form
+	settings SettingsMsg
 }
 
 func NewModel() *Model {
@@ -47,7 +48,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-type PomodoroMsg struct {
+type SettingsMsg struct {
 	work string
 	rest string
 }
@@ -58,13 +59,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// If we're in the form view, let's check when the user has submitted.
 	if form, ok := m.views[m.active].(*huh.Form); ok {
 		if form.State == huh.StateCompleted {
-			timerMsg := PomodoroMsg{
+			m.settings = SettingsMsg{
 				work: form.GetString("work"),
 				rest: form.GetString("rest"),
 			}
-			m.views[session], cmd = m.views[session].Update(timerMsg)
+			m.views[session], cmd = m.views[session].Update(m.settings)
 			m.active = session
 			return m, cmd
+		}
+	}
+
+	if session, ok := m.views[m.active].(Session); ok {
+		if session.Done() {
+			m.views[m.active], cmd = m.views[m.active].Update(m.settings)
 		}
 	}
 
