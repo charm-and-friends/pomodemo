@@ -4,6 +4,7 @@ import (
 	"log"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
+	huh "github.com/charmbracelet/huh/v2"
 )
 
 // TODO create pomodoro app multiple views
@@ -20,30 +21,52 @@ func main() {
 	}
 }
 
+const (
+	form int = iota
+	session
+)
+
 type Model struct {
 	// active, new, history? break?
 	active int
 	views  []tea.Model
+	form   *huh.Form
 }
 
 func NewModel() *Model {
 	return &Model{
-		views: []tea.Model{NewActive()},
+		views: []tea.Model{NewForm(), NewSession()},
 	}
 }
 
 func (m Model) Init() tea.Cmd {
 	var cmds []tea.Cmd
 	for _, view := range m.views {
-		// TODO does this break things?
 		cmds = append(cmds, view.Init())
 	}
 	return tea.Batch(cmds...)
 }
 
+type PomodoroMsg struct {
+	work string
+	rest string
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.views[m.active], cmd = m.views[m.active].Update(msg)
+	// If we're in the form view, let's check when the user has submitted.
+	if form, ok := m.views[m.active].(*huh.Form); ok {
+		if form.State == huh.StateCompleted {
+			timerMsg := PomodoroMsg{
+				work: form.GetString("work"),
+				rest: form.GetString("rest"),
+			}
+			m.views[session], cmd = m.views[session].Update(timerMsg)
+			m.active = session
+			return m, cmd
+		}
+	}
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
