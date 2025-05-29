@@ -20,6 +20,7 @@ type Session struct {
 	duration time.Duration
 	timer    timer.Model
 	progress progress.Model
+	count    string
 	err      error
 }
 
@@ -31,6 +32,7 @@ func NewSession() Session {
 			progress.WithDefaultGradient(),
 			progress.WithWidth(40),
 		),
+		count: "0",
 	}
 	return session
 }
@@ -39,27 +41,38 @@ func (m Session) Init() tea.Cmd {
 	return m.timer.Init()
 }
 
+type ContinueMsg string
+
 func (m Session) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
-	// toggle between break and work sessions
-	if m.timer.Timedout() {
-		m.rest = !m.rest
-	}
 	switch msg := msg.(type) {
+	//	case NewSessionMsg:
+	//		m.count = msg.value
+	//		return m, nil
+	// Reset timer
 	case SettingsMsg:
+		// TODO eventually add data persistence.
+		//		if m.count != "0" {
+		//			m.rest = !m.rest
+		//			log.Printf("rest: %v", m.rest)
+		//		}
 		if m.rest {
 			m.duration, m.err = time.ParseDuration(msg.rest)
 		} else {
 			m.duration, m.err = time.ParseDuration(msg.work)
+			// cmds = append(cmds, func() tea.Msg { return DoneSessionMsg(true) })
 		}
 		m.timer = timer.New(m.duration)
-		return m, m.timer.Init()
+		cmds = append(cmds, m.timer.Init())
+		return m, tea.Batch(cmds...)
 	}
 	m.timer, cmd = m.timer.Update(msg)
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
+
+type DoneSessionMsg bool
 
 func (m Session) Done() bool {
 	return m.timer.Timedout()
@@ -78,6 +91,27 @@ func (m Session) View() string {
 	)
 }
 
+/* Confirmation */
+
+// Show next up.
+func ContinueMenu() *huh.Form {
+	return huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Key("submit").
+				Title("Ready?").
+				Validate(func(v bool) error {
+					if !v {
+						return fmt.Errorf("No problem, ready when you are!")
+					}
+					return nil
+				}).
+				Negative("Not yet").
+				Affirmative("Let's go!"),
+		),
+	)
+}
+
 /* Form */
 
 // TODO
@@ -85,7 +119,7 @@ func (m Session) View() string {
 // - timer title
 // - Toggle between textinput vs select
 
-func NewForm() *huh.Form {
+func SettingsMenu() *huh.Form {
 	return huh.NewForm(
 		huh.NewGroup(
 			// enter work time
@@ -94,12 +128,12 @@ func NewForm() *huh.Form {
 			// show same form if I'm modifying, but set placeholder text to current values
 			huh.NewSelect[string]().
 				Key("work").
-				Options(huh.NewOptions("10s", "25m", "30m", "45m", "50m", "60m")...).
+				Options(huh.NewOptions("2s", "25m", "30m", "45m", "50m", "60m")...).
 				Title("Set work session duration").
 				Description("Get to work ya little"),
 			huh.NewSelect[string]().
 				Key("rest").
-				Options(huh.NewOptions("5s", "2m", "5m", "10m", "15m")...).
+				Options(huh.NewOptions("1s", "2m", "5m", "10m", "15m")...).
 				Title("Set rest session duration").
 				Description("Nap time"),
 			huh.NewConfirm().
@@ -111,8 +145,8 @@ func NewForm() *huh.Form {
 					}
 					return nil
 				}).
-				Affirmative("Done").
-				Negative("Nevermind"),
+				Negative("Nevermind").
+				Affirmative("Done"),
 		),
 	)
 }
