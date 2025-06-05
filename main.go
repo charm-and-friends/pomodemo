@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/charmbracelet/bubbles/v2/timer"
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -19,8 +18,8 @@ import (
 // 	 	- pause, stop, skip, quit, restart
 //
 //
-// TODO confirmation before moving onto break/work.
-// would like for this confirmation dialogue to show current number of sessions for the day
+// TODO why is it hanging after the first working session before moving onto the confirmation dialogue?
+// TODO persist sessions if they choose to save progress.
 
 func main() {
 	//	db, err := badger.Open(badger.DefaultOptions("/tmp/badger"))
@@ -82,6 +81,7 @@ func (m Model) Init() tea.Cmd {
 type SettingsMsg struct {
 	work string
 	rest string
+	save bool
 }
 
 type NewSessionMsg struct {
@@ -89,7 +89,7 @@ type NewSessionMsg struct {
 	value string
 }
 
-func (m Model) showCount() string {
+func (m Model) loadCount() string {
 	var count string
 	m.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(m.settings.work))
@@ -102,16 +102,10 @@ func (m Model) showCount() string {
 	return count
 }
 
-// key should be today's date.
-func (m Model) increment() tea.Msg {
-	msg := NewSessionMsg{
-		value: m.showCount(),
-	}
-	var count int
-	count, msg.err = strconv.Atoi(msg.value)
-
+func (m Model) setCount(count int) tea.Msg {
 	return m.db.Update(func(txn *badger.Txn) error {
-		return txn.Set([]byte(m.settings.work), []byte(fmt.Sprintf("%d", count+1)))
+		// today's date as the key
+		return txn.Set([]byte(m.settings.work), []byte(fmt.Sprintf("%d", count)))
 	})
 }
 
@@ -137,12 +131,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	//	if session, ok := m.views[m.active].(Session); ok {
-	//		if session.Done() {
-	//			m.views[m.active], cmd = m.views[m.active].Update(m.settings)
-	//		}
-	//	}
-
 	switch msg := msg.(type) {
 	// Confirm we're ready for next session before moving forward.
 	case timer.TimeoutMsg:
@@ -150,8 +138,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		log.Print("continue msg received in main")
 		m.views[m.active] = ContinueMenu()
 		m.views[m.active], cmd = m.views[m.active].Update(msg)
-		//	case DoneSessionMsg:
-		//		return m, m.increment
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":

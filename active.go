@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/charmbracelet/bubbles/v2/progress"
@@ -20,7 +21,7 @@ type Session struct {
 	duration time.Duration
 	timer    timer.Model
 	progress progress.Model
-	count    string
+	tally    int
 	err      error
 }
 
@@ -32,7 +33,6 @@ func NewSession() Session {
 			progress.WithDefaultGradient(),
 			progress.WithWidth(40),
 		),
-		count: "0",
 	}
 	return session
 }
@@ -51,17 +51,17 @@ func (m Session) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	//		m.count = msg.value
 	//		return m, nil
 	// Reset timer
+	// idk when is TimeoutMsg sent/received... it hangs on first load...
 	case SettingsMsg:
-		// TODO eventually add data persistence.
-		//		if m.count != "0" {
-		//			m.rest = !m.rest
-		//			log.Printf("rest: %v", m.rest)
-		//		}
+		if m.tally != 0 {
+			m.rest = !m.rest
+			log.Printf("rest: %v", m.rest)
+		}
 		if m.rest {
 			m.duration, m.err = time.ParseDuration(msg.rest)
 		} else {
+			m.tally += int(m.duration.Minutes())
 			m.duration, m.err = time.ParseDuration(msg.work)
-			// cmds = append(cmds, func() tea.Msg { return DoneSessionMsg(true) })
 		}
 		m.timer = timer.New(m.duration)
 		cmds = append(cmds, m.timer.Init())
@@ -83,7 +83,12 @@ func (m Session) View() string {
 	if m.rest {
 		message = "Time to snooze..."
 	}
+	completed := fmt.Sprintf("%d minutes of pure UNBRIDLED focus", m.tally)
+	if m.tally == 0 {
+		completed = ""
+	}
 	return lipgloss.JoinVertical(lipgloss.Left,
+		completed,
 		message,
 		// Note: ViewAs is easier than wrangling progress in Update, btw.
 		m.progress.ViewAs(float64(m.duration.Seconds()-m.timer.Timeout.Seconds())/m.duration.Seconds()),
@@ -128,14 +133,19 @@ func SettingsMenu() *huh.Form {
 			// show same form if I'm modifying, but set placeholder text to current values
 			huh.NewSelect[string]().
 				Key("work").
-				Options(huh.NewOptions("2s", "25m", "30m", "45m", "50m", "60m")...).
+				Options(huh.NewOptions("1m", "25m", "30m", "45m", "50m", "60m")...).
 				Title("Set work session duration").
 				Description("Get to work ya little"),
 			huh.NewSelect[string]().
 				Key("rest").
-				Options(huh.NewOptions("1s", "2m", "5m", "10m", "15m")...).
+				Options(huh.NewOptions("5s", "2m", "5m", "10m", "15m")...).
 				Title("Set rest session duration").
 				Description("Nap time"),
+			huh.NewConfirm().
+				Key("save").
+				Title("Would you like to save today's sessions?").
+				Negative("Don't Save").
+				Affirmative("Save"),
 			huh.NewConfirm().
 				Key("submit").
 				Title("Ready?").
