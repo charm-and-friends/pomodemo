@@ -12,8 +12,6 @@ import (
 	"github.com/charmbracelet/lipgloss/v2"
 )
 
-// TODO make this work on breaks too plz
-
 type Session struct {
 	rest bool
 	// There's no way to access the original timeout duration once the countdown
@@ -41,7 +39,10 @@ func (m Session) Init() tea.Cmd {
 	return m.timer.Init()
 }
 
-type ContinueMsg string
+type (
+	ContinueMsg string
+	ErrMsg      error
+)
 
 func (m Session) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -53,6 +54,7 @@ func (m Session) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Reset timer
 	// idk when is TimeoutMsg sent/received... it hangs on first load...
 	case SettingsMsg:
+		// we cannot rest until we've done a full minute of work.
 		if m.tally != 0 {
 			m.rest = !m.rest
 			log.Printf("rest: %v", m.rest)
@@ -68,14 +70,12 @@ func (m Session) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 	}
 	m.timer, cmd = m.timer.Update(msg)
-	cmds = append(cmds, cmd)
-	return m, tea.Batch(cmds...)
-}
-
-type DoneSessionMsg bool
-
-func (m Session) Done() bool {
-	return m.timer.Timedout()
+	return m, cmd
+	//	cmds = append(cmds, cmd)
+	//	if m.err != nil {
+	//		cmds = append(cmds, func() tea.Msg { return ErrMsg(m.err) })
+	//	}
+	//  return m, tea.Batch(cmds...)
 }
 
 func (m Session) View() string {
@@ -133,7 +133,7 @@ func SettingsMenu() *huh.Form {
 			// show same form if I'm modifying, but set placeholder text to current values
 			huh.NewSelect[string]().
 				Key("work").
-				Options(huh.NewOptions("1m", "25m", "30m", "45m", "50m", "60m")...).
+				Options(huh.NewOptions("10s", "25m", "30m", "45m", "50m", "60m")...).
 				Title("Set work session duration").
 				Description("Get to work ya little"),
 			huh.NewSelect[string]().

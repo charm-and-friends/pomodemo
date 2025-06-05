@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/v2/timer"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	huh "github.com/charmbracelet/huh/v2"
+	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/charmbracelet/log"
 	"github.com/dgraph-io/badger"
 )
@@ -14,9 +15,8 @@ import (
 // - form to define pomodoro pref (work session, break, maybe even a goal?)
 // - active session (timer countdown with progress bar, show how many sessions
 // they've done, maybe even textarea or list to track tasks?)
-// 	- active session commands:
-// 	 	- pause, stop, skip, quit, restart
-//
+//   - active session commands:
+//   - pause, stop, skip, quit, restart
 //
 // TODO why is it hanging after the first working session before moving onto the confirmation dialogue?
 // TODO persist sessions if they choose to save progress.
@@ -34,7 +34,7 @@ func main() {
 	}
 	defer f.Close()
 
-	p := tea.NewProgram(NewModel())
+	p := tea.NewProgram(NewMain())
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)
 	}
@@ -55,6 +55,7 @@ type Model struct {
 	form     *huh.Form
 	settings SettingsMsg
 	db       *badger.DB
+	err      error
 }
 
 // func NewModel(db *badger.DB) *Model {
@@ -64,7 +65,7 @@ type Model struct {
 // 	}
 // }
 
-func NewModel() *Model {
+func NewMain() *Model {
 	return &Model{
 		views: []tea.Model{SettingsMenu(), NewSession(), ContinueMenu()},
 	}
@@ -134,6 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	// Confirm we're ready for next session before moving forward.
 	case timer.TimeoutMsg:
+		// TODO why does this hang only during the first session.
 		m.active = confirm
 		log.Print("continue msg received in main")
 		m.views[m.active] = ContinueMenu()
@@ -143,15 +145,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		}
+	case ErrMsg:
+		m.err = msg
 	}
 
 	return m, cmd
 }
 
 func (m Model) View() string {
-	// TODO show errors
+	var err string
+	if m.err != nil {
+		err = m.err.Error()
+	}
 	if view, ok := m.views[m.active].(tea.ViewModel); ok {
-		return view.View()
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			view.View(),
+			err,
+		)
 	}
 	return "no view models :("
 }
