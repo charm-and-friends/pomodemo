@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/charmbracelet/bubbles/v2/progress"
@@ -12,26 +11,38 @@ import (
 	"github.com/charmbracelet/lipgloss/v2"
 )
 
+const (
+	work = "work"
+	rest = "rest"
+)
+
 type Session struct {
-	rest bool
+	active string
 	// There's no way to access the original timeout duration once the countdown
 	// has started.
-	duration time.Duration
 	timer    timer.Model
 	progress progress.Model
 	tally    int
 	err      error
+
+	times map[string]time.Duration
 }
 
 func NewSession() Session {
 	// create a timer with the desired interval
+	times := map[string]time.Duration{
+		work: time.Duration(time.Second * 15),
+		rest: time.Duration(time.Second * 15),
+	}
 	session := Session{
-		timer: timer.New(time.Duration(time.Second * 15)),
+		active: work,
+		timer:  timer.New(times[work]),
 		progress: progress.New(
 			progress.WithDefaultGradient(),
 			progress.WithWidth(40),
 		),
 	}
+	session.times = times
 	return session
 }
 
@@ -40,71 +51,101 @@ func (m Session) Init() tea.Cmd {
 }
 
 type (
-	ContinueMsg string
-	ErrMsg      error
+	WorkMsg string // Define if we are working or taking a break in the upcoming session.
+	MenuMsg struct {
+		active string
+	}
+	ErrMsg error
 )
 
 func (m Session) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
-	//	case NewSessionMsg:
-	//		m.count = msg.value
-	//		return m, nil
-	// Reset timer
-	// idk when is TimeoutMsg sent/received... it hangs on first load...
+	case timer.TickMsg:
+		m.timer, cmd = m.timer.Update(msg)
+		cmds = append(cmds, cmd)
+	case timer.TimeoutMsg:
+		m.Toggle()
+		// TODO do we need to pass active
+		return m, func() tea.Msg { return MenuMsg{active: m.active} }
+	case WorkMsg:
+		// Hold onto this for now - might need to pass some info along here at one point.
+		return m, m.newTimer()
+		//		cmds = append(cmds, m.newTimer())
 	case SettingsMsg:
-		// we cannot rest until we've done a full minute of work.
-		if m.tally != 0 {
-			m.rest = !m.rest
-			log.Printf("rest: %v", m.rest)
+		var err error
+		if m.times[rest], err = time.ParseDuration(msg.rest); err != nil {
+			m.err = fmt.Errorf("unable to parse rest duration from form %w", err)
 		}
-		if m.rest {
-			m.duration, m.err = time.ParseDuration(msg.rest)
-		} else {
-			m.tally += int(m.duration.Minutes())
-			m.duration, m.err = time.ParseDuration(msg.work)
+		if m.times[work], err = time.ParseDuration(msg.work); err != nil {
+			m.err = fmt.Errorf("unable to parse work duration from form %w", err)
 		}
-		m.timer = timer.New(m.duration)
-		cmds = append(cmds, m.timer.Init())
-		return m, tea.Batch(cmds...)
+		cmds = append(cmds, m.newTimer())
 	}
-	m.timer, cmd = m.timer.Update(msg)
-	return m, cmd
-	//	cmds = append(cmds, cmd)
-	//	if m.err != nil {
-	//		cmds = append(cmds, func() tea.Msg { return ErrMsg(m.err) })
-	//	}
-	//  return m, tea.Batch(cmds...)
+	return m, tea.Sequence(cmds...)
+}
+
+func (m *Session) newTimer() tea.Cmd {
+	m.timer = timer.New(m.times[m.active])
+	return m.timer.Init()
 }
 
 func (m Session) View() string {
 	message := "Get to work"
-	if m.rest {
+	if m.active == rest {
 		message = "Time to snooze..."
 	}
-	completed := fmt.Sprintf("%d minutes of pure UNBRIDLED focus", m.tally)
-	if m.tally == 0 {
-		completed = ""
-	}
 	return lipgloss.JoinVertical(lipgloss.Left,
-		completed,
 		message,
 		// Note: ViewAs is easier than wrangling progress in Update, btw.
-		m.progress.ViewAs(float64(m.duration.Seconds()-m.timer.Timeout.Seconds())/m.duration.Seconds()),
+		m.progress.ViewAs(float64(m.times[m.active].Seconds()-m.timer.Timeout.Seconds())/m.times[m.active].Seconds()),
 		m.timer.View(),
 	)
 }
 
 /* Confirmation */
 
+type ContinueMenu struct {
+	active string
+	form   *huh.Form
+}
+
+func NewContinueMenu(active string) *ContinueMenu {
+	return &ContinueMenu{
+		active,
+		createContinueForm(active),
+	}
+}
+
+func (c *Session) Toggle() {
+	if c.active == rest {
+		c.active = work
+	} else {
+		c.active = rest
+	}
+}
+
+// Implement tea.Model to be used as a view in our main model.
+func (c *ContinueMenu) Init() tea.Cmd {
+	return c.form.Init()
+}
+
+func (c *ContinueMenu) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	return c.form.Update(msg)
+}
+
+func (c *ContinueMenu) View() string {
+	return c.form.View()
+}
+
 // Show next up.
-func ContinueMenu() *huh.Form {
+func createContinueForm(active string) *huh.Form {
 	return huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
 				Key("submit").
-				Title("Ready?").
+				Title(fmt.Sprintf("Ready to %s", active)).
 				Validate(func(v bool) error {
 					if !v {
 						return fmt.Errorf("No problem, ready when you are!")
@@ -119,18 +160,9 @@ func ContinueMenu() *huh.Form {
 
 /* Form */
 
-// TODO
-// - work/break timer duration
-// - timer title
-// - Toggle between textinput vs select
-
 func SettingsMenu() *huh.Form {
 	return huh.NewForm(
 		huh.NewGroup(
-			// enter work time
-			// enter break time
-			// confirm
-			// show same form if I'm modifying, but set placeholder text to current values
 			huh.NewSelect[string]().
 				Key("work").
 				Options(huh.NewOptions("10s", "25m", "30m", "45m", "50m", "60m")...).

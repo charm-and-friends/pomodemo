@@ -2,12 +2,11 @@ package main
 
 import (
 	"fmt"
+	"log"
 
-	"github.com/charmbracelet/bubbles/v2/timer"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	huh "github.com/charmbracelet/huh/v2"
 	"github.com/charmbracelet/lipgloss/v2"
-	"github.com/charmbracelet/log"
 	"github.com/dgraph-io/badger"
 )
 
@@ -18,19 +17,16 @@ import (
 //   - active session commands:
 //   - pause, stop, skip, quit, restart
 //
-// TODO why is it hanging after the first working session before moving onto the confirmation dialogue?
-// TODO persist sessions if they choose to save progress.
-
+// TODO
+// - work/break timer duration
+// - timer title
+// - Toggle between textinput vs select
+// - count number of sessions + show number of sessions completed
+// - persist sessions if they choose to save progress.
 func main() {
-	//	db, err := badger.Open(badger.DefaultOptions("/tmp/badger"))
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-	//	defer db.Close()
-	//
 	f, err := tea.LogToFile("debug.log", "debug")
 	if err != nil {
-		log.Error("fatal:", err)
+		log.Fatal("fatal:", err)
 	}
 	defer f.Close()
 
@@ -49,7 +45,6 @@ const (
 /* Main Model  */
 
 type Model struct {
-	// active, new, history? break?
 	active   int
 	views    []tea.Model
 	form     *huh.Form
@@ -58,16 +53,9 @@ type Model struct {
 	err      error
 }
 
-// func NewModel(db *badger.DB) *Model {
-// 	return &Model{
-// 		db:    db,
-// 		views: []tea.Model{SettingsMenu(), NewSession(), ContinueMenu()},
-// 	}
-// }
-
 func NewMain() *Model {
 	return &Model{
-		views: []tea.Model{SettingsMenu(), NewSession(), ContinueMenu()},
+		views: []tea.Model{SettingsMenu(), NewSession(), NewContinueMenu(work)},
 	}
 }
 
@@ -112,9 +100,10 @@ func (m Model) setCount(count int) tea.Msg {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+	var cmds []tea.Cmd
 
 	m.views[m.active], cmd = m.views[m.active].Update(msg)
-	// If we're in the form view, let's check when the user has submitted.
+	cmds = append(cmds, cmd)
 	if form, ok := m.views[m.active].(*huh.Form); ok {
 		if form.State == huh.StateCompleted {
 			// set values
@@ -123,23 +112,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					work: form.GetString("work"),
 					rest: form.GetString("rest"),
 				}
+				m.views[session], cmd = m.views[session].Update(m.settings)
+				m.active = session
+				return m, cmd
 			}
-
-			m.views[session], cmd = m.views[session].Update(m.settings)
-			m.active = session
-			return m, cmd
-
+			if m.active == confirm {
+				// Whether or not we just completed a working session.
+				m.active = session
+				m.views[m.active], cmd = m.views[m.active].Update(WorkMsg(""))
+				return m, cmd
+			}
 		}
 	}
 
 	switch msg := msg.(type) {
 	// Confirm we're ready for next session before moving forward.
-	case timer.TimeoutMsg:
-		// TODO why does this hang only during the first session.
+	case MenuMsg:
+		m.views[confirm] = NewContinueMenu(msg.active)
 		m.active = confirm
-		log.Print("continue msg received in main")
-		m.views[m.active] = ContinueMenu()
-		m.views[m.active], cmd = m.views[m.active].Update(msg)
+		return m, m.views[m.active].Init()
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -149,7 +140,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg
 	}
 
-	return m, cmd
+	return m, tea.Sequence(cmds...)
 }
 
 func (m Model) View() string {
