@@ -67,7 +67,6 @@ func (m Session) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case timer.TimeoutMsg:
 		m.Toggle()
-		// TODO do we need to pass active
 		return m, func() tea.Msg { return MenuMsg{active: m.active} }
 	case WorkMsg:
 		// Hold onto this for now - might need to pass some info along here at one point.

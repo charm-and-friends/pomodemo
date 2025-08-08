@@ -15,13 +15,7 @@ import (
 // they've done, maybe even textarea or list to track tasks?)
 //   - active session commands:
 //   - pause, stop, skip, quit, restart
-//
-// TODO
-// - work/break timer duration
-// - timer title
-// - Toggle between textinput vs select
-// - count number of sessions + show number of sessions completed
-// - persist sessions if they choose to save progress.
+
 func main() {
 	f, err := tea.LogToFile("debug.log", "debug")
 	if err != nil {
