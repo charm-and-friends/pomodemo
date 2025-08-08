@@ -1,4 +1,4 @@
-# Lapin
+# Pomodemo
 
 A terminal-based Pomodoro timer application built with Go and Charm's TUI libraries.
 
@@ -45,3 +45,20 @@ This is a work-in-progress Pomodoro application. Planned features include:
 - Task tracking during sessions
 - Enhanced session controls (pause, skip, restart)
 - Session counter and progress tracking
+
+## Feedback
+
+We’d love to hear your thoughts on this project. Join the chatter happening on [Discord](https://charm.sh/chat).
+
+## License
+
+[MIT](https://github.com/charmbracelet/skate/raw/main/LICENSE)
+
+---
+
+Part of [Charm](https://charm.land).
+
+<a href="https://charm.land/"><img alt="The Charm logo" width="400" src="https://stuff.charm.sh/charm-banner-next.jpg" /></a>
+
+<!--prettier-ignore-->
+Charm热爱开源 • Charm loves open source
