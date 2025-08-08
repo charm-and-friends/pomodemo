@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -70,32 +69,11 @@ func (m Model) Init() tea.Cmd {
 type SettingsMsg struct {
 	work string
 	rest string
-	save bool
 }
 
 type NewSessionMsg struct {
 	err   error
 	value string
-}
-
-func (m Model) loadCount() string {
-	var count string
-	m.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(m.settings.work))
-		count = item.String()
-		if err != nil {
-			return fmt.Errorf("unable to get number of work sessions")
-		}
-		return txn.Commit()
-	})
-	return count
-}
-
-func (m Model) setCount(count int) tea.Msg {
-	return m.db.Update(func(txn *badger.Txn) error {
-		// today's date as the key
-		return txn.Set([]byte(m.settings.work), []byte(fmt.Sprintf("%d", count)))
-	})
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

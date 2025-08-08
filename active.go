@@ -174,11 +174,6 @@ func SettingsMenu() *huh.Form {
 				Title("Set rest session duration").
 				Description("Nap time"),
 			huh.NewConfirm().
-				Key("save").
-				Title("Would you like to save today's sessions?").
-				Negative("Don't Save").
-				Affirmative("Save"),
-			huh.NewConfirm().
 				Key("submit").
 				Title("Ready?").
 				Validate(func(v bool) error {
